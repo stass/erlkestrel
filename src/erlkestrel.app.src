@@ -1,0 +1,12 @@
+{application, erlkestrel,
+ [
+  {description, "Erlang kestrel client"},
+  {vsn, "0.1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {modules, [erlkestrel, erlkestrel_client, erlkestrel_parser]},
+  {env, []}
+ ]}.
