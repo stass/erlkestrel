@@ -10,7 +10,7 @@
 %%
 
 init() ->
-    #pstate{state = init}.
+    #pstate{state = init, data = []}.
 
 parse({value, {single, _}}, #pstate{state = init} = State, Data) ->
     {ok, Data, State};
@@ -42,6 +42,19 @@ parse({value, {get, _}}, #pstate{state = expect_end} = State, NewData) ->
 	<<"END\r\n">> ->
 	    Value = list_to_binary(lists:reverse(State#pstate.data)),
 	    {ok, Value, State#pstate{state = init, data = []}};
+	_ ->
+	    {error, invalid_response}
+    end;
+parse({value, {multiline, _}},
+      #pstate{state = init, data = Data} = State, NewData) ->
+    % Data length without trailing "\r\n".
+    LineLength = size(NewData) - 2,
+    case NewData of
+	<<"END\r\n">> ->
+	    Value = lists:reverse(Data),
+	    {ok, Value, State#pstate{data = []}};
+	<<Line:LineLength/binary, "\r\n">> ->
+	    {continue, State#pstate{data = [Line | Data]}};
 	_ ->
 	    {error, invalid_response}
     end;

@@ -4,7 +4,7 @@
 	 start_link/3, stop/1, rawcmd/3, rawcmd/4]).
 -export([version/1, flush_all/1, flush/2, reload/1, shutdown/1,
 	 status/1, status/2, delete/2, set/3, set/4, get/2,
-	 get_trans/3, peek/2]).
+	 get_trans/3, peek/2, stats/1]).
 
 -define(TIMEOUT, 5000).
 
@@ -162,3 +162,21 @@ get_trans(Client, Queue, TransFlags) ->
 peek(Client, Queue) ->
     Cmd = [<<"GET ">>, Queue, <<"/peek">>],
     rawcmd(Client, get, Cmd).
+
+stats(Client) ->
+    case rawcmd(Client, multiline, <<"STATS">>) of
+	{ok, Rawstats} ->
+	    try
+		lists:map(fun (X) ->
+				  case string:tokens(binary_to_list(X), " ") of
+				      ["STAT", Key, Val] ->
+					  {Key, Val};
+				      _ ->
+					  throw(invalid_response)
+				  end end, Rawstats)
+	    catch
+		throw:invalid_response -> {error, invalid_response}
+	    end;
+	Other ->
+	    Other
+    end.
