@@ -58,5 +58,36 @@ parse({value, {multiline, _}},
 	_ ->
 	    {error, invalid_response}
     end;
+parse({value, {streaming, _}}, #pstate{state = init} = State, Data) ->
+    case Data of
+	<<"END\r\n">> ->
+	    {ok, done, State};
+	_ ->
+	    ["VALUE", _Q, _Flags, SizeStr] = string:tokens(binary_to_list(Data),
+							" \r\n"),
+	    Size = list_to_integer(SizeStr),
+	    {continue, State#pstate{state = get_data, data = [], expect = Size}}
+    end;
+parse({value, {streaming, _}},
+      #pstate{state = get_data, expect = Expected, data = Data} = State,
+      NewData) ->
+    NewDataSize = size(NewData),
+    case NewData of
+	<<Value:Expected/binary, "\r\n">> ->
+	    {continue, State#pstate{state = expect_end, data = [Value | Data]}};
+	_ when NewDataSize =< Expected ->
+	    {continue, State#pstate{expect = Expected - NewDataSize,
+				   data = [NewData | Data]}};
+	_ ->
+	    {error, invalid_response}
+    end;
+parse({value, {streaming, _}}, #pstate{state = expect_end} = State, NewData) ->
+    case NewData of
+	<<"END\r\n">> ->
+	    Value = list_to_binary(lists:reverse(State#pstate.data)),
+	    {ok, Value, State#pstate{state = init, data = []}};
+	_ ->
+	    {error, invalid_response}
+    end;
 parse(empty, _State, _Data) ->
     {error, unexpected_reply}.

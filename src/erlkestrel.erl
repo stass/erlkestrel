@@ -4,7 +4,7 @@
 	 start_link/3, stop/1, rawcmd/3, rawcmd/4]).
 -export([version/1, flush_all/1, flush/2, reload/1, shutdown/1,
 	 status/1, status/2, delete/2, set/3, set/4, get/2,
-	 get_trans/3, peek/2, stats/1]).
+	 get_trans/3, peek/2, stats/1, subscribe/2, receive_msgs/0, monitor/4]).
 
 -define(TIMEOUT, 5000).
 
@@ -180,3 +180,24 @@ stats(Client) ->
 	Other ->
 	    Other
     end.
+
+subscribe(Client, Queue) ->
+    subscribe(Client, Queue, self()).
+subscribe(Client, Queue, Pid) ->
+    gen_server:call(Client, {subscribe, Queue, Pid}, ?TIMEOUT).
+
+receive_msgs() ->
+    receive
+	{ok, done} ->
+	    io:format("Monitors is done~n");
+	Msg ->
+	    io:format("Got ~p~n", [Msg]),
+	    receive_msgs()
+    end.
+
+monitor(Client, Queue, Time, MaxItems) ->
+    Cmd = [<<"MONITOR ">>, Queue, <<" ">>,
+	  integer_to_list(Time), <<" ">>,
+	  integer_to_list(MaxItems), <<"\r\n">>],
+    Pid = spawn(fun () -> receive_msgs() end),
+    ok = call(Client, {streaming, Pid, Cmd}, ?TIMEOUT).

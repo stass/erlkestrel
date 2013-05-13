@@ -47,6 +47,8 @@ init([Host, Port, ReconnectInterval]) ->
 
 handle_call({command, Type, Req}, From, State) ->
     do_request(Type, Req, From, State);
+handle_call({streaming, Pid, Req}, _From, State) ->
+    do_request(streaming, Req, Pid, State);
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
 handle_call(_Msg, _From, State) ->
@@ -124,6 +126,10 @@ do_request(Type, Req, From, #state{socket = Sock, queue = Queue} = State) ->
 	    case Type of
 		no_reply ->
 		    {reply, ok, State};
+		streaming ->
+		    % return ok and remember the Pid to send data to.
+		    NewQueue = queue:in({Type, From}, Queue),
+		    {reply, ok, State#state{queue = NewQueue}};
 		_ ->
 		    % store the request data in the queue.
 		    NewQueue = queue:in({Type, From}, Queue),
@@ -170,6 +176,16 @@ handle_reply(Result, Value, Queue) ->
 	    error_logger:error_msg("Got stray reply from kestrel: ~p~n",
 				   [Value]),
 	    throw(stray_reply);
+	{value, {streaming, Pid}} ->
+	    Pid ! {kestrel, Value},
+	    case {Result, Value} of
+		{ok, done} ->
+		    NewQueue;
+		{error, _} ->
+		    NewQueue;
+		_ ->
+		    Queue
+	    end;
 	{value, {_Type, From}} ->
 	    gen_server:reply(From, {Result, Value}),
 	    NewQueue
