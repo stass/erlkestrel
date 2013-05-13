@@ -7,6 +7,6 @@
                   kernel,
                   stdlib
                  ]},
-  {modules, [erlkestrel, erlkestrel_client, erlkestrel_parser]},
+  {modules, [erlkestrel, erlkestrel_client, erlkestrel_sub, erlkestrel_parser]},
   {env, []}
  ]}.
