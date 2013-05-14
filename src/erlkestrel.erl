@@ -211,4 +211,4 @@ monitor(Client, Queue, Time, MaxItems) ->
 
 confirm(Client, Queue, N) ->
     Cmd = [<<"CONFIRM ">>, Queue, <<" ">>, integer_to_list(N)],
-    rawcmd(Client, no_reply, Cmd).
+    rawcmd(Client, single, Cmd).
