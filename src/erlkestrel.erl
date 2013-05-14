@@ -4,8 +4,8 @@
 	 start_link/3, stop/1, rawcmd/3, rawcmd/4]).
 -export([version/1, flush_all/1, flush/2, reload/1, shutdown/1,
 	 status/1, status/2, delete/2, set/3, set/4, get/2,
-	 get_trans/3, peek/2, stats/1, subscribe/2, receive_msgs/0,
-	 monitor/4, monitor/5, confirm/3, ack/2]).
+	 get_trans/3, peek/2, stats/1, subscribe/2, monitor/5,
+	 confirm/3, ack/2]).
 
 -define(TIMEOUT, 5000).
 
@@ -183,31 +183,17 @@ stats(Client) ->
     end.
 
 subscribe(Client, Queue) ->
-    Pid = spawn(fun () -> receive_msgs() end),
-    subscribe(Client, Queue, Pid).
+    subscribe(Client, Queue, self()).
 subscribe(Client, Queue, Pid) ->
-    spawn(fun() -> erlkestrel_sub:start_link(Client, Pid, Queue) end).
+    erlkestrel_sub:start_link(Client, Pid, Queue).
 ack(SClient, N) ->
     gen_server:call(SClient, {ack, N}).
-
-receive_msgs() ->
-    receive
-	{ok, done} ->
-	    io:format("Monitors is done~n");
-	Msg ->
-	    io:format("Rgot ~p~n", [Msg]),
-	    receive_msgs()
-    end.
 
 monitor(Client, Pid, Queue, Time, MaxItems) ->
     Cmd = [<<"MONITOR ">>, Queue, <<" ">>,
 	  integer_to_list(Time), <<" ">>,
 	  integer_to_list(MaxItems), <<"\r\n">>],
     call(Client, {streaming, Pid, Cmd}, ?TIMEOUT).
-
-monitor(Client, Queue, Time, MaxItems) ->
-    Pid = spawn(fun () -> receive_msgs() end),
-    monitor(Client, Pid, Queue, Time, MaxItems).
 
 confirm(Client, Queue, N) ->
     Cmd = [<<"CONFIRM ">>, Queue, <<" ">>, integer_to_list(N)],

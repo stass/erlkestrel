@@ -90,7 +90,7 @@ send_fetch_command(#state{fetch_in_progress = true} = State) ->
     {ok, State};
 send_fetch_command(#state{fetch_in_progress = false,
 			  client = Client, queuename = QueueName} = State) ->
-    case erlkestrel:monitor(Client, self(), QueueName, 5, State#state.hwm) of
+    case erlkestrel:monitor(Client, self(), QueueName, 1, State#state.hwm) of
 	ok ->
 	    {ok, State#state{fetch_in_progress = true}};
 	_ ->
