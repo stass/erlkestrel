@@ -63,7 +63,7 @@ handle_info({tcp, Sock, Data}, State) ->
 handle_info({tcp_error, _Sock, _Reason}, State) ->
     {noreply, State};	% will tcp_closed be always send afterwards?
 handle_info({tcp_closed, Sock}, State) ->
-    error_logger:info_msg("Got tcp_closed for ~p~n", [Sock]),
+    error_logger:debug_msg("Got tcp_closed for ~p~n", [Sock]),
     reply_all_waiters(State#state.queue, error, connection_lost),
     case State#state.reconnect_interval of
 	disable ->
@@ -74,7 +74,7 @@ handle_info({tcp_closed, Sock}, State) ->
 	    {noreply, State#state{socket = undefined, queue = queue:new()}}
     end;
 handle_info({connected, NewSock}, #state{socket = undefined} = State) ->
-    error_logger:info_msg("Got reconnected socket ~p~n", [NewSock]),
+    error_logger:debug_msg("Got reconnected socket ~p~n", [NewSock]),
     {noreply, State#state{socket = NewSock}};
 handle_info(Msg, State) ->
     {stop, {unhandled_message, Msg}, State}.
@@ -82,7 +82,7 @@ handle_info(Msg, State) ->
 terminate(_Reason, #state{socket = undefined}) ->
     ok;
 terminate(Reason, State) ->
-    error_logger:info_msg("Terminated: ~p~n", [Reason]),
+    error_logger:debug_msg("Terminated: ~p~n", [Reason]),
     gen_tcp:close(State#state.socket),
     ok.
 
@@ -98,7 +98,6 @@ connect(State) ->
     case gen_tcp:connect(Host, Port, [{active, once}, {packet, line},
 				      {reuseaddr, true}, binary]) of
 	{ok, Socket} ->
-	    error_logger:info_msg("Got socket~p~n", [Socket]),
 	    {ok, State#state{socket = Socket}};
 	{error, Reason} ->
 	    {error, {connect_error, Reason}}
@@ -107,12 +106,12 @@ connect(State) ->
 reconnect(Client, State) ->
     case connect(State) of
 	{ok, NewState} ->
-	    error_logger:info_msg("Successfully reconnected~n"),
+	    error_logger:debug_msg("Successfully reconnected~n"),
 	    Socket = NewState#state.socket,
 	    gen_tcp:controlling_process(Socket, Client),
 	    Client ! {connected, Socket};
 	{error, _Reason} ->
-	    error_logger:info_msg("Unable to reconnect, sleeping~n"),
+	    error_logger:debug_msg("Unable to reconnect, sleeping~n"),
 	    timer:sleep(State#state.reconnect_interval),
 	    reconnect(Client, State)
     end.
@@ -120,7 +119,6 @@ reconnect(Client, State) ->
 do_request(_Type, _Req, _From, #state{socket = undefined} = State) ->
     {reply, {error, disconnected}, State};
 do_request(Type, Req, From, #state{socket = Sock, queue = Queue} = State) ->
-    error_logger:info_msg("Sending via ~p: ~p~n", [Sock, Req]),
     case gen_tcp:send(Sock, Req) of
 	ok ->
 	    case Type of
@@ -136,7 +134,7 @@ do_request(Type, Req, From, #state{socket = Sock, queue = Queue} = State) ->
 		    {noreply, State#state{queue = NewQueue}}
 	    end;
 	{error, Reason} ->
-	    error_logger:info_msg("tcp:send returned~p~n", [Reason]),
+	    error_logger:debug_msg("tcp:send returned ~p~n", [Reason]),
 	    {reply, {error, Reason}, State}
     end.
 
@@ -148,7 +146,7 @@ handle_data(Data,
     Head = queue:peek(Queue),
     case erlkestrel_parser:parse(Head, Pstate, Data) of
 	{error, Reason} ->
-	    error_logger:error_msg("Got error from parser: ~p~n", [Reason]),
+	    error_logger:info_msg("Got error from parser: ~p~n", [Reason]),
 	    gen_tcp:close(Sock),
 	    self() ! {tcp_closed, Sock},
 	    State#state{socket = undefined};
@@ -173,7 +171,7 @@ handle_reply(Result, Value, Queue) ->
     {Head, NewQueue} = queue:out(Queue),
     case Head of
 	empty ->
-	    error_logger:error_msg("Got stray reply from kestrel: ~p~n",
+	    error_logger:info_msg("Got stray reply from kestrel: ~p~n",
 				   [Value]),
 	    throw(stray_reply);
 	{value, {streaming, Pid}} ->
