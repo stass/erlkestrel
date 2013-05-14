@@ -89,5 +89,5 @@ parse({value, {streaming, _}}, #pstate{state = expect_end} = State, NewData) ->
 	_ ->
 	    {error, invalid_response}
     end;
-parse(empty, _State, _Data) ->
-    {error, unexpected_reply}.
+parse(empty, _State, Data) ->
+    {error, {unexpected_reply, Data}}.
