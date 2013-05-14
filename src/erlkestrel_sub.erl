@@ -3,28 +3,35 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/3, stop/1]).
+-export([start_link/3, start_link/4, stop/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
 -record(state, {
+	  batch_size,
 	  client,
-	  pid,
+	  fetch_in_progress,
+	  hwm,
 	  inflight,
-	  queuename,
+	  lwm,
+	  pid,
 	  queue,
-	  size,
-	  fetch_in_progress
+	  queuename,
+	  size
 }).
+
+-define(DEFAULT_BATCH_SIZE, 10).
 
 %% ===================================================================
 %% API functions
 %% ===================================================================
 
+start_link(Client, Pid, QueueName, BatchSize) ->
+    gen_server:start_link(?MODULE, [Client, Pid, QueueName, BatchSize], []).
 start_link(Client, Pid, QueueName) ->
-    gen_server:start_link(?MODULE, [Client, Pid, QueueName], []).
+    start_link(Client, Pid, QueueName, ?DEFAULT_BATCH_SIZE).
 
 stop(Client) ->
     gen_server:call(Client, stop).
@@ -33,16 +40,17 @@ stop(Client) ->
 %% gen_server callbacks
 %% ===================================================================
 
--define(HIGH_WATERMARK, 100).
--define(LOW_WATERMARK, 50).
--define(BATCH_SIZE, 10).
-
-init([Client, Pid, QueueName]) ->
+init([Client, Pid, QueueName, BatchSize])
+  when is_integer(BatchSize),
+       is_list(QueueName) ->
     State = #state{client = Client,
 		   queuename = QueueName,
 		   pid = Pid,
 		   inflight = 0,
 		   fetch_in_progress = false,
+		   batch_size = BatchSize,
+		   hwm = 10 * BatchSize,
+		   lwm = 5 * BatchSize,
 		   queue = queue:new(),
 		   size = 0},
     {ok, State, 0}.
@@ -65,16 +73,14 @@ handle_call({ack, N}, _From, #state{inflight = Inflight} = State)
 		    {reply, ok, send_batch(NewState), 10000}
 	    end
     end;
-handle_call(Msg, _From, State) ->
-    error_logger:info_msg("SUB got ~p~n", Msg),
+handle_call(_Msg, _From, State) ->
     {reply, unknown_request, State}.
 
-handle_cast(Msg, State) ->
-    error_logger:info_msg("SUB got ~p~n", Msg),
+handle_cast(_Msg, State) ->
     {noreply, State}.
 
-fetch_messages(State) ->
-    if State#state.size < ?LOW_WATERMARK ->
+fetch_messages(#state{lwm = LWM} = State) ->
+    if State#state.size < LWM ->
 	    send_fetch_command(State);
        true ->
 	    {ok, State}
@@ -84,7 +90,7 @@ send_fetch_command(#state{fetch_in_progress = true} = State) ->
     {ok, State};
 send_fetch_command(#state{fetch_in_progress = false,
 			  client = Client, queuename = QueueName} = State) ->
-    case erlkestrel:monitor(Client, self(), QueueName, 5, ?HIGH_WATERMARK) of
+    case erlkestrel:monitor(Client, self(), QueueName, 5, State#state.hwm) of
 	ok ->
 	    {ok, State#state{fetch_in_progress = true}};
 	_ ->
@@ -95,7 +101,6 @@ send_confirm(Client, Queue, N) ->
     erlkestrel:confirm(Client, Queue, N).
 
 handle_info({kestrel, done}, State) ->
-    error_logger:info_msg("SUB got done~n"),
     case fetch_messages(State#state{fetch_in_progress = false}) of
 	{ok, NewState} ->
 	    {noreply, NewState};
@@ -103,7 +108,6 @@ handle_info({kestrel, done}, State) ->
 	    {noreply, NewState, 10000}
     end;
 handle_info({kestrel, connection_lost}, State) ->
-    error_logger:info_msg("SUB got connlost~n"),
     case fetch_messages(State#state{fetch_in_progress = false}) of
 	{ok, NewState} ->
 	    {noreply, NewState};
@@ -111,11 +115,9 @@ handle_info({kestrel, connection_lost}, State) ->
 	    {noreply, NewState, 10000}
     end;
 handle_info({kestrel, Data}, State) ->
-    error_logger:info_msg("SUB got kestrel data~n"),
     NewState = handle_incoming_data(Data, State),
     {noreply, NewState};
 handle_info(timeout, State) ->
-    error_logger:info_msg("Got timeout~n"),
     case fetch_messages(State) of
 	{ok, NewState} ->
 	    {noreply, NewState};
@@ -123,11 +125,9 @@ handle_info(timeout, State) ->
 	    {noreply, NewState, 10000}
     end;
 handle_info(Msg, State) ->
-    error_logger:info_msg("SUB got ~p~n", [Msg]),
     {stop, {unhandled_message, Msg}, State}.
 
-terminate(Reason, _State) ->
-    error_logger:info_msg("Terminated: ~p~n", [Reason]),
+terminate(_Reason, _State) ->
     ok.
 
 code_change(_OldVersion, State, _Extra) ->
@@ -142,7 +142,7 @@ handle_incoming_data(Data, #state{queue = Queue, size = Size} = State) ->
     send_batch(State#state{queue = NewQueue, size = NewSize}).
 
 send_batch(#state{inflight = Inflight, size = Size} = State) ->
-    N = min(?BATCH_SIZE - Inflight, Size),
+    N = min(State#state.batch_size - Inflight, Size),
     send_batch_iter(State, N).
 
 send_batch_iter(#state{pid = Pid, queue = Queue, size = Size} = State, N) ->
