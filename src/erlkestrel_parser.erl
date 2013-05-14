@@ -12,7 +12,7 @@
 init() ->
     #pstate{state = init, data = []}.
 
-parse({value, {single, _}}, #pstate{state = init} = State, Data) ->
+parse({value, {oneline, _}}, #pstate{state = init} = State, Data) ->
     {ok, Data, State};
 parse({value, {get, _}}, #pstate{state = init} = State, Data) ->
     case Data of

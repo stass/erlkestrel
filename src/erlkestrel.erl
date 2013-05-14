@@ -41,7 +41,7 @@ call(Client, Query, Timeout) ->
 %% Kestrel protocol commands.
 %%
 version(Client) ->
-    case rawcmd(Client, single, <<"VERSION">>) of
+    case rawcmd(Client, oneline, <<"VERSION">>) of
 	{ok, Reply} ->
 	    case string:tokens(binary_to_list(Reply), " \r\n") of
 		["VERSION", Ver] ->
@@ -54,19 +54,19 @@ version(Client) ->
     end.
 
 flush_all(Client) ->
-    rawcmd(Client, single, <<"FLUSH_ALL">>).
+    rawcmd(Client, oneline, <<"FLUSH_ALL">>).
 
 flush(Client, Queue) ->
-    expect_end(rawcmd(Client, single, [<<"FLUSH ">>, Queue])).
+    expect_end(rawcmd(Client, oneline, [<<"FLUSH ">>, Queue])).
 
 reload(Client) ->
-    rawcmd(Client, single, <<"RELOAD">>).
+    rawcmd(Client, oneline, <<"RELOAD">>).
 
 shutdown(Client) ->
     rawcmd(Client, no_reply, <<"SHUTDOWN">>).
 
 delete(Client, Queue) ->
-    case rawcmd(Client, single, [<<"DELETE ">>, Queue]) of
+    case rawcmd(Client, oneline, [<<"DELETE ">>, Queue]) of
 	{ok, Reply} ->
 	    case Reply of
 		<<"DELETED\r\n">> ->
@@ -79,7 +79,7 @@ delete(Client, Queue) ->
     end.
 
 status(Client) ->
-    case rawcmd(Client, single, <<"STATUS">>) of
+    case rawcmd(Client, oneline, <<"STATUS">>) of
 	<<"UP\r\n">> ->
 	    {ok, up};
 	<<"READONLY\r\n">> ->
@@ -91,11 +91,11 @@ status(Client) ->
     end.
 
 status(Client, up) ->
-    expect_end(rawcmd(Client, single, [<<"STATUS UP">>]));
+    expect_end(rawcmd(Client, oneline, [<<"STATUS UP">>]));
 status(Client, readonly) ->
-    expect_end(rawcmd(Client, single, [<<"STATUS READONLY">>]));
+    expect_end(rawcmd(Client, oneline, [<<"STATUS READONLY">>]));
 status(Client, quiescent) ->
-    expect_end(rawcmd(Client, single, [<<"STATUS QUIESCENT">>])).
+    expect_end(rawcmd(Client, oneline, [<<"STATUS QUIESCENT">>])).
 
 expect_end(Reply) ->
     case Reply of
@@ -120,7 +120,7 @@ set(Client, Queue, Data, Expiration) ->
 	   integer_to_list(Expiration), <<" ">>,
 	   integer_to_list(Size), <<"\r\n">>,
 	   Data],
-    case rawcmd(Client, single, Cmd) of
+    case rawcmd(Client, oneline, Cmd) of
 	{ok, Reply} ->
 	    case Reply of
 		<<"STORED\r\n">> ->
@@ -211,4 +211,4 @@ monitor(Client, Queue, Time, MaxItems) ->
 
 confirm(Client, Queue, N) ->
     Cmd = [<<"CONFIRM ">>, Queue, <<" ">>, integer_to_list(N)],
-    rawcmd(Client, single, Cmd).
+    rawcmd(Client, oneline, Cmd).
