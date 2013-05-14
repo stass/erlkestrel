@@ -4,8 +4,8 @@
 	 start_link/3, stop/1, rawcmd/3, rawcmd/4]).
 -export([version/1, flush_all/1, flush/2, reload/1, shutdown/1,
 	 status/1, status/2, delete/2, set/3, set/4, get/2,
-	 get_trans/3, peek/2, stats/1, subscribe/2, monitor/5,
-	 confirm/3, ack/2]).
+	 get_trans/3, peek/2, stats/1, subscribe/2, subscribe/3,
+	 subscribe/4, monitor/5, confirm/3, ack/2]).
 
 -define(TIMEOUT, 5000).
 
@@ -186,6 +186,8 @@ subscribe(Client, Queue) ->
     subscribe(Client, Queue, self()).
 subscribe(Client, Queue, Pid) ->
     erlkestrel_sub:start_link(Client, Pid, Queue).
+subscribe(Client, Queue, Pid, BatchSize) ->
+    erlkestrel_sub:start_link(Client, Pid, Queue, BatchSize).
 ack(SClient, N) ->
     gen_server:call(SClient, {ack, N}).
 
